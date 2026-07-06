@@ -1,0 +1,69 @@
+model:
+  model_type: "audioground"
+
+  llama_path: "/dev/shm/audioground_models/salmonn-7b-llama-merged"
+  whisper_path: "/dev/shm/audioground_models/whisper-large-v3"
+  beats_path: "/dev/shm/audioground_models/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt"
+  ckpt: "/home/irteam/avqa2/SALMONN/ckpts/salmonn_7b_v0.pth"
+
+  freeze_whisper: True
+  freeze_beats: True
+
+  use_speech_Qformer: True
+  freeze_speech_QFormer: False
+  window_level_Qformer: True
+  num_speech_query_token: 1
+  second_per_window: 0.333333
+  second_stride: 0.333333
+
+  speech_llama_proj_model: ""
+  freeze_speech_llama_proj: False
+
+  lora: True
+  lora_rank: 32
+  lora_alpha: 64
+  lora_dropout: 0.1
+
+  multi_prompt: True
+  prompt_template: "USER: {}\nASSISTANT:"
+  prompt_path: "prompts/train_prompt.json"
+  max_txt_len: 300
+  end_sym: "</s>"
+
+  # Ablation: FI only (TS and ATE OFF)
+  use_frame_interpolation: True
+  use_timestamp_conditioning: False
+  use_absolute_time_embedding: False
+
+datasets:
+  train_ann_path: "/home/irteam/avqa2/SALMONN/data/audioground_it_train_dash.json"
+  valid_ann_path: "/home/irteam/avqa2/SALMONN/data/audioground_it_valid_dash.json"
+  test_ann_path:  "/home/irteam/avqa2/SALMONN/data/audioground_it_valid_dash.json"
+  whisper_path: "/dev/shm/audioground_models/whisper-large-v3"
+
+run:
+  seed: 42
+  output_dir: "output/ablation_fi_only"
+  evaluate: False
+
+  log_freq: 10
+  epoch_based: True
+  accum_grad_iters: 1
+  batch_size_train: 12
+  batch_size_eval: 8
+  num_workers: 4
+
+  device: "cuda"
+  use_distributed: True
+  amp: True
+  world_size: 4
+  dist_url: "env://"
+
+  optims:
+    max_epoch: 1
+    warmup_steps: 100
+    warmup_start_lr: 1e-6
+    init_lr: 2e-5
+    min_lr: 2e-5
+    weight_decay: 0.05
+    beta2: 0.999

@@ -166,3 +166,16 @@ launch.sh
 /output
 arnold.sh
 /configs_local
+# ---- AudioGround: weights & large data (do not commit) ----
+*.pth
+*.pt
+*.bin
+ckpts/
+Tuned/
+/output/
+data/audioground_it_*.json
+data/AudioCapsConcat_paper/
+BEATs_*.pt
+*.wav
+!resource/audio_demo/*.wav
+!data/gunshots.wav
