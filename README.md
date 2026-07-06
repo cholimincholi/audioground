@@ -1,85 +1,83 @@
-# SALMONN: Speech Audio Language Music Open Neural Network
+# AudioGround: Fine-Grained Temporal Grounding in Audio via Deterministic Boundary Supervision
 
-<div align=center><img src="resource/salmon.png" height="256px" width="256px"/></div>
+AudioGround equips Large Audio Language Models (LALMs) with **fine-grained temporal grounding** — not just recognizing *which* sounds occur, but localizing *when* they occur with explicit start–end timestamps `[ts, te]`.
 
-<h1 align="center">
-  <a href="https://git.io/typing-svg">
-    <img src="https://readme-typing-svg.herokuapp.com/?lines=Hello,+There!+👋;Welcome+to+SALMONN;&center=true&size=30">
-  </a>
-</h1>
+It consists of two parts:
 
-🚀🚀 Welcome to the repo of **SALMONN**!
+1. **AudioGround-IT** — a time-aware audio instruction-tuning dataset with **deterministic boundary supervision**: ~49.9K instructions over ~835 hours of audio across four temporal tasks (Grounding, Duration, Ordering, Frequency), built by concatenating AudioCaps clips so that every event boundary is known by construction (no post-hoc or LLM-inferred labels).
+2. **AudioGround** — a lightweight temporal extension of [SALMONN](https://github.com/bytedance/SALMONN) that adds (i) frame-level interpolation across the Whisper and BEATs encoders, (ii) a **time-aware Q-Former** with sliding-window compression and timestamp conditioning, and (iii) a **hybrid absolute time embedding** (sinusoidal base + zero-initialized learnable residual).
 
-SALMONN is a large language model (LLM) enabling **speech, audio events, and music inputs**, which is developed by the Department of Electronic Engineering at Tsinghua University and ByteDance. Instead of speech-only input or audio-event-only input, SALMONN can perceive and understand all kinds of audio inputs and therefore obtain emerging capabilities such as multilingual speech recognition and translation and audio-speech co-reasoning. This can be regarded as giving the LLM "ears" and cognitive hearing abilities, which makes SALMONN a step towards hearing-enabled artificial general intelligence.
+> This repository builds on ByteDance/Tsinghua's SALMONN. The base SALMONN code is retained; AudioGround adds the dataset-synthesis pipeline, the temporal-awareness model components, and grounding evaluation. See the upstream project for the original model.
 
-<div style='display:flex; gap: 0.25rem; '>
-<a href='https://openreview.net/pdf?id=14rn7HpKVk'><img src='https://img.shields.io/badge/SALMONN_paper-PDF-green'></a>
-<a href='https://huggingface.co/tsinghua-ee/SALMONN'><img src='https://img.shields.io/badge/SALMONN--13B-checkpoint-yellow'></a> 
-<a href='https://huggingface.co/tsinghua-ee/SALMONN-7B'><img src='https://img.shields.io/badge/SALMONN--7B-checkpoint-yellow'></a>
-</div>
+## Method overview
 
-## 🔥 News
-- [2024-05-28] 🧳 We have released all the annotations (including 600k SQA/AQA data and 50k audio-based storytelling data) for the 3-stage training of SALMONN! Feel free to download them [here](https://drive.google.com/file/d/15cQO--rtMM9JD22y-A5oXXvT3DujgE2e/view?usp=sharing)!
-- [2024-04-07] 🤖 We have released all the codes you need to train your own SALMONN! Try some cool things!
-- [2024-01-16] 💖 Our paper was accepted by ICLR 2024!
-- [2023-11-13] 🎁 We have released a **7B version of SALMONN** at [tsinghua-ee/SALMONN-7B](https://huggingface.co/tsinghua-ee/SALMONN-7B) and built the 7B demo [here](https://huggingface.co/spaces/tsinghua-ee/SALMONN-7B-gradio)!
-- [2023-10-08] ✨ We have released [**the model checkpoint**](https://huggingface.co/tsinghua-ee/SALMONN) and **the inference code** for SALMONN-13B!
+**Data synthesis (AudioGround-IT).** Each AudioCaps clip (~10 s) is an atomic building block. Clips are concatenated with short silence gaps (0.3–0.5 s) into 20–120 s audio. Because the concatenation order is controlled, every event boundary is deterministic. Semantic ambiguity is controlled with a caption cosine-similarity threshold (τ = 0.33), and both temporal position and length are balanced to reduce distributional bias. All four tasks share a unified output target: the temporal interval(s) `[ts, te]` supporting the answer.
 
-## 🌟 Structure
+**Model (AudioGround).** Long audio is split into 30 s chunks and encoded by frozen Whisper + BEATs encoders (BEATs frames interpolated to match Whisper). A sliding-window Q-Former compresses each window and is conditioned on a textual timestamp string ("This segment is from s to e seconds"). A hybrid absolute time embedding is added to each window's tokens to inject continuous global time. Only the window-level Q-Former, the projection layer, and the LoRA adapters on the frozen LLM are trained.
 
-The model architecture of SALMONN is shown below. A window-level Q-Former is used as the connection module to fuse the outputs from a Whisper speech encoder and a BEATs audio encoder as augmented audio tokens, which are aligned with the LLM input space. The LoRA adaptor aligns the augmented LLM input space with its output space. The text prompt is used to instruct SALMONN to answer open-ended questions about the general audio inputs and the answers are in the LLM text responses. 
+## Repository layout
 
-<div align=center><img src="resource/structure.png" height="100%" width="75%"/></div>
+| Path | Purpose |
+|---|---|
+| `generate_audiocaps_paper.py` | Synthesize 20–120 s audio by concatenating AudioCaps clips (deterministic boundaries) |
+| `build_audioground_it.py` | Build the 4-task AudioGround-IT instruction JSON |
+| `dataset_audioground.py` | Instruction-tuning dataset loader with long-audio chunking |
+| `models/salmonn.py` | Base SALMONN + sliding-window Q-Former + time-embedding modules |
+| `models/audioground.py` | AudioGround model (absolute time embedding: sinusoidal / learned / hybrid) |
+| `train.py` | Training entry point (config-driven) |
+| `eval_audioground.py` | Moment-retrieval evaluation (R1@IoU) |
+| `configs/audioground.yaml` | Main training config (paper settings) |
+| `소프트웨어_등록_AudioGround/` | Software-registration package (document + core code copies) |
 
-## ⚡️ Demos
+## Setup
 
-Compared with traditional speech and audio processing tasks such as speech recognition and audio caption, SALMONN leverages the general knowledge and cognitive abilities of the LLM to achieve a cognitively oriented audio perception, which dramatically improves the versatility of the model and the richness of the task. In addition, SALMONN is able to follow textual commands and even spoken commands with a relatively high degree of accuracy. Since SALMONN only uses training data based on textual commands, listening to spoken commands is also a cross-modal emergent ability.
-
-Here are some examples of SALMONN.
-
-| Audio                                                  | Response                                     |
-| ------------------------------------------------------ | -------------------------------------------- |
-| [gunshots.wav](./resource/audio_demo/gunshots.wav)     | ![sac](resource/response_demo/sac.png)       |
-| [duck.wav](./resource/audio_demo/duck.wav)             | ![story](resource/response_demo/story.png)   |
-| [music.wav](./resource/audio_demo/music.wav)           | ![mc](resource/response_demo/mc.png)         |
-
-
-## 🌈 How to train a model
-
-For SALMONN-13B v1, you need to use the following dependencies:
-1. Our environment: The python version is 3.9.17, and other required packages can be installed with the following command: ```pip install -r requirements.txt```.
-2. Download [whisper large v2](https://huggingface.co/openai/whisper-large-v2/tree/main) to ```whisper_path```.
-3. Download [Fine-tuned BEATs_iter3+ (AS2M) (cpt2)](https://1drv.ms/u/s!AqeByhGUtINrgcpj8ujXH1YUtxooEg?e=E9Ncea) to `beats_path`.
-4. Download [vicuna 13B v1.1](https://huggingface.co/lmsys/vicuna-13b-v1.1/tree/main) to ```llama_path```.
-5. Running with ```python3 train.py --cfg-path configs/config.yaml``` in A100-SXM-80GB.
-
-## 🌈 How to inference in CLI
-
-1. Same as **How to train a model: 1-4**.
-2. Download [salmonn v1](https://huggingface.co/tsinghua-ee/SALMONN/blob/main/salmonn_v1.pth) to ```ckpt```.
-3. Running with ```python3 cli_inference.py --cfg-path configs/decode_config.yaml``` in A100-SXM-80GB. Now you can input ```wav_path``` and ```prompt```. Enjoy yourself !
-
-## 🌈 How to launch a web demo
-
-1. Same as **How to train a model: 1-4**.
-2. Download [salmonn v1](https://huggingface.co/tsinghua-ee/SALMONN/blob/main/salmonn_v1.pth) to ```ckpt```.
-3. Running with ```python3 web_demo.py --cfg-path configs/decode_config.yaml``` in A100-SXM-80GB.
-
-## 👀 Team
-
-**Team Tsinghua**: Wenyi Yu, Changli Tang, Guangzhi Sun, Chao Zhang
-
-**Team ByteDance**: Xianzhao Chen, Wei Li, Tian Tan, Lu Lu, Zejun Ma
-
-## ✨ Citation
-If you find SALMONN useful, please cite the paper:
+```bash
+pip install -r requirements.txt
 ```
-@inproceedings{
-  tang2024salmonn,
-  title={{SALMONN}: Towards Generic Hearing Abilities for Large Language Models},
-  author={Changli Tang and Wenyi Yu and Guangzhi Sun and Xianzhao Chen and Tian Tan and Wei Li and Lu Lu and Zejun MA and Chao Zhang},
-  booktitle={The Twelfth International Conference on Learning Representations},
-  year={2024},
-  url={https://openreview.net/forum?id=14rn7HpKVk}
-}
+
+Download the frozen backbones and place them where `configs/audioground.yaml` expects:
+- [Whisper large-v3](https://huggingface.co/openai/whisper-large-v3)
+- [Fine-tuned BEATs_iter3+ (AS2M) cpt2](https://github.com/microsoft/unilm/tree/master/beats)
+- A merged SALMONN-7B LLM base (see `merge_salmonn_lora.py`) and the SALMONN checkpoint `salmonn_7b_v0.pth`
+
+## Usage
+
+### 1. Build AudioGround-IT
+
+```bash
+# Synthesize long audio with deterministic event boundaries
+python generate_audiocaps_paper.py \
+    --source_dir /path/to/AudioCaps \
+    --output_dir data/AudioCapsConcat_paper \
+    --train_samples 15000 \
+    --mode_ratio long:0.55,single:0.35,multi:0.10 \
+    --workers 16
+
+# Assemble the 4-task instruction JSON
+python build_audioground_it.py
 ```
+
+### 2. Train
+
+```bash
+# Paper settings: 6K steps, effective batch 24, LoRA r=32 (α=64)
+bash train_audioground.sh
+# or directly:
+python -m torch.distributed.run --nproc_per_node=8 train.py --cfg-path configs/audioground.yaml
+```
+
+Key config knobs (`configs/audioground.yaml`): `second_per_window` (sliding window), `use_timestamp_conditioning` (TS), `use_absolute_time_embedding` / `ate_type` (`sinusoidal` | `learned` | `hybrid`), `ate_beta_init`.
+
+### 3. Evaluate (moment retrieval, R1@IoU)
+
+```bash
+bash run_eval_audioground.sh output/audioground/checkpoint_best.pth all
+# or a single benchmark:
+python eval_audioground.py --dataset cm_test --ckpt output/audioground/checkpoint_best.pth
+```
+
+Benchmarks: Clotho-Moment, UnAV-100-subset, TUT-Sound-Events-2017, reported as R1@0.5 / R1@0.7.
+
+## Acknowledgements
+
+Built on [SALMONN](https://github.com/bytedance/SALMONN) (Tsinghua University & ByteDance). Audio sourced from [AudioCaps](https://audiocaps.github.io/). We thank the authors of these projects.
